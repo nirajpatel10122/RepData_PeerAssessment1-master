@@ -1,0 +1,102 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+## Loading and preprocessing the data
+```{r}
+if (!file.exists("activity.csv")) {
+    unzip("activity.zip")
+}
+activity <- read.csv("activity.csv")
+
+activity$date <- as.Date(activity$date)
+activity$interval <- as.factor(activity$interval)
+```
+
+## What is mean total number of steps taken per day?
+```{r}
+library(plyr)
+
+steps_per_day <- ddply(activity, .(date), summarise, sum = sum(steps, na.rm=T))
+steps_per_day
+
+hist(steps_per_day$sum, ylab="Number of Days", col="blue", xlab="Number of Steps", main="Histogram of Steps Per Day, Oct-Nov 2012")
+
+mean(steps_per_day$sum)
+
+median(steps_per_day$sum)
+```
+
+## What is the average daily activity pattern?
+```{r}
+library(ggplot2)
+
+steps_per_interval <- ddply(activity, .(interval), summarise, sum = sum(steps, na.rm=T))
+p <- ggplot(steps_per_interval, aes(x=interval, y=sum, group=1)) 
+p + geom_line() + labs(title = "Average Steps per Day by 5-min Intervals, Oct-Nov 2012") + labs(x = "5-minute Intervals", y = "Average Number of Steps")
+
+steps_per_interval[ which(steps_per_interval$sum==(max(steps_per_interval$sum))), ]
+```
+
+## Inputing missing values
+
+```{r}
+NA_values <- activity[!complete.cases(activity),]
+nrow(NA_values)
+
+# Calculate the mean for each interval
+interval_mean <- ddply(activity, .(interval), summarise, mean = mean(steps, na.rm=T))
+# Add the interval mean as a new variable to the activity dataset 
+activity_with_interval_mean <- join(activity, interval_mean)
+
+# Write function that will replace NA values with the interval mean
+replace_NA <- function(dataset, variable, replacement) {
+    for (i in 1:nrow(dataset)) {
+        if (is.na(dataset[i, variable])) {
+                dataset[i, variable] <- dataset[i, replacement]
+        }
+    }
+    dataset
+}
+# Run the function on the dataset
+complete_activity <- replace_NA(activity_with_interval_mean, variable=1, replacement=4)
+complete_activity <- complete_activity[, -4]
+head(complete_activity)
+
+complete_steps_per_day <- ddply(complete_activity, .(date), summarise, sum = sum(steps))
+complete_steps_per_day$sum <- round(complete_steps_per_day$sum)
+hist(complete_steps_per_day$sum, ylab="Number of Days", col="red", xlab="Number of Steps", main="Histogram of Steps Per Day, Oct-Nov 2012")
+
+mean(steps_per_day$sum)
+
+mean(complete_steps_per_day$sum)
+
+median(steps_per_day$sum)
+
+median(complete_steps_per_day$sum)
+
+par(mfrow=c(1,2)) 
+hist(steps_per_day$sum, ylab="Number of Days", col=rgb(1,0,0,0.2), xlab="Number of Steps", main="Steps Per Day, Excl. NA")
+hist(complete_steps_per_day$sum, ylab="Number of Days", col=rgb(0,0,1,0.2), xlab="Number of Steps", main="Steps Per Day, Impute NA")
+
+hist(steps_per_day$sum,ylim=c(0,25),breaks=10,col=rgb(1,0,0,0.2), ylab="Number of Days", xlab="Number of Steps", main="Steps Per Day, NA vs Imputed")
+par(new=TRUE)
+hist(complete_steps_per_day$sum,ylim=c(0,25),breaks=10,col=rgb(0,0,1,0.2),main="",xlab="",ylab="")
+legend('topleft',c('NA','Imputed'),
+       fill = c(rgb(1,0,0,0.2), rgb(0,0,1,0.2)), bty = 'n',
+       border = NA)
+```
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+library(timeDate)
+complete_activity$day_of_week <- ifelse(isWeekday(complete_steps_per_day$date)==TRUE, "weekday", "weekend")
+
+library(lattice)
+xyplot(steps ~ interval | day_of_week, layout = c(1, 2), data=complete_activity, type="l")
+```
+
